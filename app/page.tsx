@@ -2,337 +2,501 @@
 
 import { useState } from "react";
 
-// Sample research paper abstract for quick testing during hackathon demos
-const SAMPLE_PAPER = `Title: Attention Is All You Need (Vaswani et al.)
+interface Claim {
+  claim: string;
+  evidence: string;
+  status:
+    | "Supported"
+    | "Partially supported"
+    | "Not verified"
+    | "Conflicting evidence";
+}
 
-Abstract:
-The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely.
-
-Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs.`;
-
-interface AnalysisResult {
-  title: string;
-  summary: string;
-  keyFindings: string[];
-  methodology: string;
-  limitations: string[];
+interface Result {
+  title?: string;
+  status?: string;
+  summary?: string;
+  claims?: Claim[];
+  datasets?: string[];
+  datasetStatus?: string;
+  datasetDetails?: string;
+  evidence?: string[];
+  blockers?: string[];
+  inconsistencies?: string[];
+  environment?: string;
 }
 
 export default function Home() {
-  const [paperText, setPaperText] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [paper, setPaper] = useState("");
+  const [repo, setRepo] = useState("");
+  const [repoEvidence, setRepoEvidence] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<Result | null>(null);
+  const [error, setError] = useState("");
 
-  // Compute word and character counts dynamically
-  const wordCount = paperText.trim() ? paperText.trim().split(/\s+/).length : 0;
-  const charCount = paperText.length;
-
-  const handlePasteSample = () => {
-    setPaperText(SAMPLE_PAPER);
-    setError(null);
-  };
-
-  const handleClear = () => {
-    setPaperText("");
-    setResult(null);
-    setError(null);
-  };
-
-  const handleAnalyze = () => {
-    if (!paperText.trim()) {
-      setError("Please paste or type some research paper text first.");
+  const investigate = async () => {
+    if (!paper.trim()) {
+      setError("Paste the research paper text first.");
       return;
     }
 
-    if (paperText.trim().length < 50) {
-      setError("Text is too short. Please provide a longer excerpt or abstract (at least 50 characters).");
+    if (!repo.trim()) {
+      setError("Enter the GitHub repository URL.");
       return;
     }
 
-    setError(null);
-    setIsLoading(true);
+    setLoading(true);
+    setError("");
     setResult(null);
 
-    // Simulate an AI analysis process with a short delay (e.g., 900ms)
-    // This will be replaced with a real AI API call later.
-    setTimeout(() => {
-      setIsLoading(false);
-      setResult({
-        title: paperText.includes("Attention Is All You Need")
-          ? "Attention Is All You Need (Analysis)"
-          : "Research Paper Analysis",
-        summary:
-          "The paper introduces an innovative architectural paradigm that replaces recurrent and convolutional neural structures with multi-head self-attention mechanisms, significantly improving training parallelization and benchmark accuracy.",
-        keyFindings: [
-          "Demonstrates that pure attention mechanisms can outperform recurrent networks in sequence transduction tasks.",
-          "Achieves state-of-the-art translation performance on WMT 2014 English-to-German (28.4 BLEU) and English-to-French (41.8 BLEU).",
-          "Substantially reduces training time compared to previous architectures (trained in 3.5 days on 8 GPUs).",
-        ],
-        methodology:
-          "Encoder-decoder architecture utilizing stacked multi-head self-attention and point-wise fully connected layers without recurrence or convolutions.",
-        limitations: [
-          "Self-attention computation scales quadratically O(n²) with sequence length.",
-          "Tested primarily on machine translation tasks; generalizability to other modalities requires further evaluation.",
-        ],
+    try {
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          text: paper,
+          repoUrl: repo,
+          repoEvidence,
+        }),
       });
-    }, 900);
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Investigation failed.");
+      }
+
+      setResult(data);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
+
+  const claims = result?.claims || [];
+
+  const supportedClaims = claims.filter(
+    (claim) =>
+      claim.status === "Supported" ||
+      claim.status === "Partially supported"
+  ).length;
+
+  const evidenceCoverage =
+    claims.length > 0
+      ? Math.round((supportedClaims / claims.length) * 100)
+      : 0;
 
   return (
-    <div className="min-h-screen bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 font-sans">
-      {/* Top Navigation / Header */}
-      <header className="border-b border-zinc-200 bg-white/80 backdrop-blur-md sticky top-0 z-10 dark:border-zinc-800 dark:bg-zinc-900/80">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-600 text-white font-bold shadow-sm">
-              ✈️
-            </span>
-            <div>
-              <span className="font-bold text-lg tracking-tight">PaperPilot</span>
-              <span className="ml-2 text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                MVP Demo
-              </span>
-            </div>
+    <main className="min-h-screen bg-zinc-950 text-white">
+      <header className="border-b border-zinc-800">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              ReproCheck
+            </h1>
+
+            <p className="text-sm text-zinc-400 mt-1">
+              AI research reproducibility investigator
+            </p>
           </div>
-          <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            Hackathon Edition
+
+          <span className="hidden sm:block text-xs text-zinc-500">
+            Open-weight AI • Hackathon MVP
           </span>
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="max-w-6xl mx-auto px-4 py-8">
-        {/* Hero Section */}
-        <section className="mb-8 text-center sm:text-left">
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-white">
-            Understand Research Papers in Seconds
-          </h1>
-          <p className="mt-2 text-base sm:text-lg text-zinc-600 dark:text-zinc-400 max-w-2xl">
-            Paste any abstract, introduction, or paper excerpt below. PaperPilot
-            extracts key findings, methodology, and limitations instantly.
+      <section className="max-w-7xl mx-auto px-6 py-10">
+        <div className="mb-8">
+          <div className="inline-flex items-center rounded-full border border-blue-900 bg-blue-950/30 px-3 py-1 text-xs text-blue-300 mb-4">
+            Evidence-first research auditing
+          </div>
+
+          <h2 className="text-4xl sm:text-5xl font-bold tracking-tight">
+            Can this research actually be reproduced?
+          </h2>
+
+          <p className="mt-4 text-zinc-400 max-w-3xl text-base leading-relaxed">
+            ReproCheck traces important paper claims against available
+            implementation evidence, datasets, configuration and
+            experimental details. It separates what is supported from
+            what remains unverified.
           </p>
-        </section>
+        </div>
 
-        {/* 2-Column Responsive Workspace */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
-          {/* Left Column: Input Card */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm flex flex-col gap-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Paper Input
-              </h2>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handlePasteSample}
-                  className="text-xs font-medium text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline underline-offset-2 transition-colors cursor-pointer"
-                >
-                  Paste Sample Paper
-                </button>
-                {paperText && (
-                  <button
-                    type="button"
-                    onClick={handleClear}
-                    className="text-xs font-medium text-zinc-500 hover:text-red-500 dark:text-zinc-400 dark:hover:text-red-400 transition-colors cursor-pointer ml-2"
-                  >
-                    Clear
-                  </button>
-                )}
-              </div>
+        <div className="grid lg:grid-cols-2 gap-6">
+          {/* INPUT */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold">
+                Investigation inputs
+              </h3>
+
+              <span className="text-xs text-zinc-500">
+                Step 1
+              </span>
             </div>
 
-            {/* Textarea */}
-            <div className="relative">
-              <textarea
-                value={paperText}
-                onChange={(e) => {
-                  setPaperText(e.target.value);
-                  if (error) setError(null);
-                }}
-                placeholder="Paste the title, abstract, or text from any research paper here..."
-                rows={12}
-                className="w-full p-4 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-y text-sm leading-relaxed"
-              />
-            </div>
+            <label className="block text-sm font-semibold mt-5">
+              Research paper
+            </label>
 
-            {/* Error Message */}
+            <textarea
+              value={paper}
+              onChange={(e) => setPaper(e.target.value)}
+              placeholder="Paste the research paper text..."
+              className="mt-2 w-full h-64 rounded-xl bg-zinc-950 border border-zinc-700 p-4 text-sm resize-none outline-none focus:border-blue-500"
+            />
+
+            <label className="block text-sm font-semibold mt-5">
+              GitHub repository
+            </label>
+
+            <input
+              value={repo}
+              onChange={(e) => setRepo(e.target.value)}
+              placeholder="https://github.com/owner/repository"
+              className="mt-2 w-full rounded-xl bg-zinc-950 border border-zinc-700 p-3 text-sm outline-none focus:border-blue-500"
+            />
+
+            <label className="block text-sm font-semibold mt-5">
+              Repository evidence
+            </label>
+
+            <p className="text-xs text-zinc-500 mt-1">
+              Paste README text, relevant files, configuration or
+              other repository evidence.
+            </p>
+
+            <textarea
+              value={repoEvidence}
+              onChange={(e) => setRepoEvidence(e.target.value)}
+              placeholder={`Example:
+
+README:
+Transformer implementation for WMT14.
+
+Files:
+transformer.py
+train.py
+config.yaml
+requirements.txt
+data/README.md
+
+Config:
+batch_size: 4096
+learning_rate: 0.0005
+
+Dataset:
+WMT14 EN-DE and EN-FR
+`}
+              className="mt-2 w-full h-44 rounded-xl bg-zinc-950 border border-zinc-700 p-4 text-sm resize-none outline-none focus:border-blue-500"
+            />
+
             {error && (
-              <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs font-medium dark:bg-red-950/30 dark:border-red-900/50 dark:text-red-400">
-                ⚠️ {error}
+              <div className="mt-4 rounded-lg border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+                {error}
               </div>
             )}
 
-            {/* Footer with stats & button */}
-            <div className="flex items-center justify-between flex-wrap gap-3 pt-2 border-t border-zinc-100 dark:border-zinc-800">
-              <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                <span>{wordCount} words</span>
-                <span className="mx-2">•</span>
-                <span>{charCount} characters</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleAnalyze}
-                disabled={isLoading}
-                className="inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white font-medium text-sm transition-all shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-              >
-                {isLoading ? (
-                  <>
-                    <svg
-                      className="animate-spin h-4 w-4 text-white"
-                      xmlns="http://www.w3.org/2000/svg"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8v8H4z"
-                      />
-                    </svg>
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <span>Analyze Paper</span>
-                    <span>→</span>
-                  </>
-                )}
-              </button>
-            </div>
+            <button
+              onClick={investigate}
+              disabled={loading}
+              className="mt-5 w-full rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 py-3.5 font-semibold transition"
+            >
+              {loading
+                ? "Investigating evidence..."
+                : "Investigate Reproducibility"}
+            </button>
           </div>
 
-          {/* Right Column: Output / Insights Panel */}
-          <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-5 shadow-sm min-h-[420px] flex flex-col justify-between">
-            <div>
-              <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-100 dark:border-zinc-800">
-                <h2 className="text-sm font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                  Insights & Summary
-                </h2>
-                {result && (
-                  <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-medium">
-                    Analysis Complete
-                  </span>
-                )}
-              </div>
+          {/* RESULTS */}
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-5">
+            {!result && !loading && (
+              <div className="min-h-[600px] flex items-center justify-center text-center">
+                <div>
+                  <div className="text-5xl mb-5">
+                    🔬
+                  </div>
 
-              {/* State 1: Loading Skeleton */}
-              {isLoading && (
-                <div className="space-y-4 py-8 animate-pulse">
-                  <div className="h-4 bg-zinc-200 dark:bg-zinc-800 rounded w-3/4" />
-                  <div className="space-y-2">
-                    <div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded" />
-                    <div className="h-3 bg-zinc-200 dark:bg-zinc-800 rounded w-5/6" />
-                  </div>
-                  <div className="h-20 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl p-4 mt-4" />
-                  <div className="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-6">
-                    Parsing sections and extracting key insights...
-                  </div>
-                </div>
-              )}
-
-              {/* State 2: No Analysis Yet (Empty State) */}
-              {!isLoading && !result && (
-                <div className="flex flex-col items-center justify-center text-center py-16 px-4 text-zinc-400 dark:text-zinc-500">
-                  <div className="w-12 h-12 rounded-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center text-xl mb-3">
-                    📄
-                  </div>
-                  <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300 mb-1">
-                    No Analysis Generated Yet
+                  <h3 className="font-semibold text-xl">
+                    Reproduction report
                   </h3>
-                  <p className="text-xs max-w-sm">
-                    Paste your paper text on the left and click{" "}
-                    <strong className="text-zinc-700 dark:text-zinc-300">
-                      &quot;Analyze Paper&quot;
-                    </strong>{" "}
-                    to see instant takeaways. Or click &quot;Paste Sample Paper&quot; for a quick test.
+
+                  <p className="text-sm text-zinc-500 mt-2 max-w-sm">
+                    Your evidence-based investigation will appear here.
                   </p>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* State 3: Analysis Results */}
-              {!isLoading && result && (
-                <div className="space-y-5">
-                  {/* Title & TL;DR */}
-                  <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900/40">
-                    <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-300 uppercase tracking-wide mb-1">
-                      <span>📌</span>
-                      <span>TL;DR Summary</span>
+            {loading && (
+              <div className="min-h-[600px] flex items-center justify-center">
+                <div className="text-center">
+                  <div className="text-5xl mb-5 animate-pulse">
+                    🔎
+                  </div>
+
+                  <p className="font-semibold text-lg">
+                    Investigating evidence...
+                  </p>
+
+                  <p className="text-sm text-zinc-500 mt-2">
+                    Qwen is tracing paper claims against the supplied
+                    repository evidence.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {result && (
+              <div className="space-y-5">
+                {/* TITLE */}
+                <div>
+                  <p className="text-xs uppercase tracking-wider text-zinc-500">
+                    Paper
+                  </p>
+
+                  <h3 className="text-xl font-bold mt-1">
+                    {result.title || "Research paper"}
+                  </h3>
+                </div>
+
+                {/* STATUS */}
+                <div className="rounded-xl border border-blue-900 bg-blue-950/30 p-4">
+                  <p className="text-xs uppercase text-blue-400 font-bold">
+                    Overall status
+                  </p>
+
+                  <p className="text-2xl font-bold mt-1">
+                    {result.status ||
+                      "Insufficient evidence"}
+                  </p>
+                </div>
+
+                {/* EVIDENCE COVERAGE */}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-wider text-zinc-500">
+                        Evidence coverage
+                      </p>
+
+                      <h4 className="font-bold mt-1">
+                        Claim evidence coverage
+                      </h4>
                     </div>
-                    <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed">
-                      {result.summary}
-                    </p>
+
+                    <span className="text-2xl font-bold">
+                      {evidenceCoverage}%
+                    </span>
                   </div>
 
-                  {/* Key Contributions */}
-                  <div>
-                    <h3 className="text-xs font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                      <span>💡</span>
-                      <span>Key Findings & Contributions</span>
-                    </h3>
-                    <ul className="space-y-2">
-                      {result.keyFindings.map((finding, idx) => (
-                        <li
-                          key={idx}
-                          className="text-xs sm:text-sm text-zinc-700 dark:text-zinc-300 flex items-start gap-2 bg-zinc-50 dark:bg-zinc-800/40 p-2.5 rounded-lg border border-zinc-100 dark:border-zinc-800"
+                  <div className="mt-4 h-2 rounded-full bg-zinc-800 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-500 transition-all"
+                      style={{
+                        width: `${evidenceCoverage}%`,
+                      }}
+                    />
+                  </div>
+
+                  <p className="mt-2 text-xs text-zinc-500">
+                    {supportedClaims} of {claims.length} extracted
+                    claims have supporting or partial repository evidence.
+                  </p>
+                </div>
+
+                {/* SUMMARY */}
+                <div>
+                  <h4 className="font-bold">
+                    Summary
+                  </h4>
+
+                  <p className="text-sm text-zinc-400 mt-2 leading-relaxed">
+                    {result.summary ||
+                      "No summary returned."}
+                  </p>
+                </div>
+
+                {/* CLAIM → EVIDENCE */}
+                <div className="rounded-xl border border-blue-900 bg-blue-950/20 p-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-bold text-blue-300">
+                      Claim → Evidence
+                    </h4>
+
+                    <span className="text-xs text-zinc-500">
+                      {claims.length} claims traced
+                    </span>
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    {claims.length > 0 ? (
+                      claims.map((item, i) => (
+                        <div
+                          key={i}
+                          className="rounded-lg border border-zinc-800 bg-zinc-950 p-3"
                         >
-                          <span className="text-blue-500 font-bold shrink-0">•</span>
-                          <span>{finding}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+                          <div className="flex items-start justify-between gap-3">
+                            <p className="text-sm font-semibold leading-relaxed">
+                              {item.claim}
+                            </p>
 
-                  {/* Methodology */}
-                  <div>
-                    <h3 className="text-xs font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                      <span>🔬</span>
-                      <span>Methodology</span>
-                    </h3>
-                    <p className="text-xs sm:text-sm text-zinc-700 dark:text-zinc-300 bg-zinc-50 dark:bg-zinc-800/40 p-3 rounded-lg border border-zinc-100 dark:border-zinc-800 leading-relaxed">
-                      {result.methodology}
-                    </p>
-                  </div>
+                            <span
+                              className={`shrink-0 text-[10px] font-bold px-2 py-1 rounded-full ${
+                                item.status === "Supported"
+                                  ? "bg-emerald-950 text-emerald-300"
+                                  : item.status ===
+                                    "Conflicting evidence"
+                                  ? "bg-red-950 text-red-300"
+                                  : "bg-amber-950 text-amber-300"
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          </div>
 
-                  {/* Limitations */}
-                  <div>
-                    <h3 className="text-xs font-bold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-                      <span>⚠️</span>
-                      <span>Limitations & Notes</span>
-                    </h3>
-                    <ul className="space-y-1.5">
-                      {result.limitations.map((limitation, idx) => (
-                        <li
-                          key={idx}
-                          className="text-xs text-zinc-600 dark:text-zinc-400 flex items-start gap-2"
-                        >
-                          <span className="text-amber-500 shrink-0 font-bold">›</span>
-                          <span>{limitation}</span>
-                        </li>
-                      ))}
-                    </ul>
+                          <div className="mt-3 text-xs text-zinc-500 leading-relaxed">
+                            <span className="text-zinc-400 font-semibold">
+                              Evidence:
+                            </span>{" "}
+                            {item.evidence}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-zinc-500">
+                        No claims could be traced from the supplied
+                        evidence.
+                      </p>
+                    )}
                   </div>
                 </div>
-              )}
-            </div>
 
-            {/* Bottom note for hackathon reviewer / user */}
-            <div className="mt-6 pt-3 border-t border-zinc-100 dark:border-zinc-800 text-[11px] text-zinc-400 dark:text-zinc-500 flex items-center justify-between">
-              <span>PaperPilot Interface v0.1</span>
-              <span>Next step: AI API integration</span>
-            </div>
+                {/* DATASET */}
+                <div className="rounded-xl border border-amber-900 bg-amber-950/20 p-4">
+                  <h4 className="font-bold text-amber-300">
+                    Dataset reproducibility
+                  </h4>
+
+                  <p className="mt-2 font-semibold">
+                    {result.datasetStatus ||
+                      "Not verified"}
+                  </p>
+
+                  <p className="text-sm text-zinc-400 mt-1 leading-relaxed">
+                    {result.datasetDetails ||
+                      "No dataset details returned."}
+                  </p>
+
+                  {result.datasets &&
+                  result.datasets.length > 0 ? (
+                    <ul className="mt-3 list-disc list-inside text-sm text-zinc-300">
+                      {result.datasets.map((dataset, i) => (
+                        <li key={i}>
+                          {dataset}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+
+                {/* EVIDENCE */}
+                <div>
+                  <h4 className="font-bold">
+                    Evidence found
+                  </h4>
+
+                  <ul className="mt-2 space-y-2 text-sm text-zinc-400">
+                    {result.evidence &&
+                    result.evidence.length > 0 ? (
+                      result.evidence.map((item, i) => (
+                        <li key={i}>
+                          • {item}
+                        </li>
+                      ))
+                    ) : (
+                      <li>
+                        • No concrete repository evidence was returned.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* BLOCKERS */}
+                <div>
+                  <h4 className="font-bold">
+                    Reproducibility blockers
+                  </h4>
+
+                  <ul className="mt-2 space-y-2 text-sm text-red-300">
+                    {result.blockers &&
+                    result.blockers.length > 0 ? (
+                      result.blockers.map((item, i) => (
+                        <li key={i}>
+                          • {item}
+                        </li>
+                      ))
+                    ) : (
+                      <li>
+                        • No blockers identified.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* INCONSISTENCIES */}
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+                  <h4 className="font-bold text-purple-300">
+                    Paper / code inconsistencies
+                  </h4>
+
+                  <ul className="mt-3 space-y-2 text-sm text-zinc-400">
+                    {result.inconsistencies &&
+                    result.inconsistencies.length > 0 ? (
+                      result.inconsistencies.map((item, i) => (
+                        <li key={i}>
+                          • {item}
+                        </li>
+                      ))
+                    ) : (
+                      <li>
+                        • No explicit paper/code inconsistencies
+                        were identified from the supplied evidence.
+                      </li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* ENVIRONMENT */}
+                <div>
+                  <h4 className="font-bold">
+                    Environment
+                  </h4>
+
+                  <p className="mt-2 text-sm text-zinc-400 leading-relaxed">
+                    {result.environment ||
+                      "Environment details were not verified."}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </main>
-    </div>
+      </section>
+
+      <footer className="max-w-7xl mx-auto px-6 py-8 text-xs text-zinc-600 text-center">
+        ReproCheck • Evidence-first research reproducibility analysis
+        using an open-weight Qwen model
+      </footer>
+    </main>
   );
 }
